@@ -207,3 +207,8 @@ rqt_graph
 3. **Error `ModuleNotFoundError: No module named 'basics.velocity_turlte_pub'` al ejecutar con `ros2 run`**
    - Causa: error de dedo en el nombre del módulo dentro de `entry_points` en `setup.py` (`turlte` en vez de `turtle`, y un guion en vez de punto entre el paquete y el archivo).
    - Solución: se corrigieron los nombres en `entry_points` para que coincidieran exactamente con los nombres reales de los archivos (`basics.velocity_turtle_pub:main`), y se recompiló el paquete.
+
+
+
+Video:
+https://drive.google.com/file/d/1hXZYPb7vIlgvJjjyg1aVuUwg1ZfPA4fh/view?usp=sharing
