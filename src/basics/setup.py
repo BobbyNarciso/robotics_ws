@@ -28,6 +28,10 @@ setup(
             'velocity_subscriber = basics.velocity_subscriber:main',
             'velocity_turtle_pub = basics.velocity_turtle_pub:main',
             'velocity_turtle_sub = basics.velocity_turtle_sub:main',
+            'led_blink = basics.led_blink:main',
+            'serial_bridge = basics.serial_bridge:main',
+            'analog_serial_pub = basics.analog_serial_pub:main',
+            'serial_pot = basics.serial_pot:main',
         ],
-    }, 
+    },
 )
