@@ -211,6 +211,52 @@ Subscription count: 1
 
 ---
 
+## Lectura de potenciómetro (ESP32)
+
+Este ejercicio lee un potenciómetro conectado a un ESP32 y transmite su valor a ROS2 mediante comunicación serial.
+
+### Publicador (`analog_serial_pub.py`)
+
+El nodo `analog_serial_pub` publica el valor leído del ADC en el tópico **`/analog`**, usando mensajes de tipo **`std_msgs/Int32`**.
+
+Funcionamiento:
+- Se abre una conexión serial al puerto `/dev/ttyUSB0` a 115200 baudios.
+- Un timer revisa el puerto serial cada 0.01 segundos en busca de datos nuevos.
+- Cada línea recibida se valida como número y se publica como `Int32` en el tópico `/analog`.
+
+### Suscriptor (`analog_subs.py`)
+
+El nodo `analog_subscriber` se suscribe al tópico `/analog` y, cada vez que llega un mensaje nuevo, imprime en consola el valor del ADC recibido.
+
+### Firmware del ESP32 (`ADC_Pot.ino`)
+
+El sketch lee continuamente el valor analógico del potenciómetro conectado al pin 15 con `analogRead()`, y lo envía por serial cada 100 milisegundos con `Serial.println()`.
+
+### Nodos activos durante la ejecución
+
+```
+/analog_serial_pub
+/analog_subscriber
+```
+
+### Tópicos activos
+
+```
+/analog
+/parameter_events
+/rosout
+```
+
+### Comunicación
+
+`analog_serial_pub` publica hacia `/analog`, y `analog_subscriber` está suscrito a ese mismo tópico, recibiendo en tiempo real el valor del potenciómetro conforme se mueve físicamente.
+
+### Video de demostración — Potenciómetro
+
+[Ver video de demostración del potenciómetro](https://drive.google.com/file/d/1DqhsjX0LgjlAFKG0LxICFzLTJ_06_MQT/view?usp=sharing)
+
+---
+
 ## Comandos utilizados
 
 ### Compilación
@@ -302,6 +348,30 @@ ros2 topic hz /led_command
 rqt_graph
 ```
 
+### Ejecución de la lectura del potenciómetro (en terminales separadas)
+
+```bash
+ros2 run basics analog_serial_pub
+```
+
+```bash
+ros2 run basics analog_subs
+```
+
+### Comprobación del funcionamiento del potenciómetro
+
+```bash
+ros2 node list
+ros2 node info /analog_serial_pub
+ros2 node info /analog_subscriber
+
+ros2 topic list
+ros2 topic info /analog
+ros2 topic echo /analog
+ros2 topic hz /analog
+rqt_graph
+```
+
 ---
 
 ## Problemas encontrados y solución
@@ -322,3 +392,6 @@ rqt_graph
    - Causa: el usuario no pertenecía al grupo `dialout`, necesario para acceder a puertos seriales sin privilegios de superusuario.
    - Solución: se agregó el usuario al grupo con `sudo usermod -a -G dialout $USER`, y se usó `sudo chmod 666 /dev/ttyUSB0` como solución temporal mientras se aplicaba el cambio de grupo (que requiere cerrar sesión y volver a entrar).
 
+5. **Solo un proceso puede usar el puerto serial `/dev/ttyUSB0` a la vez**
+   - Causa: tanto el ejemplo del LED como el del potenciómetro usan el mismo ESP32 y puerto serial, por lo que no se pueden correr ambos sistemas simultáneamente.
+   - Solución: se cargó el sketch correspondiente a cada ejercicio (`LED_Serial.ino` o `ADC_Pot.ino`) desde el IDE de Arduino antes de correr los nodos de ROS2 asociados a ese ejercicio.
