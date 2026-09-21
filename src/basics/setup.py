@@ -32,7 +32,7 @@ setup(
             'led_blink = basics.led_blink:main',
             'serial_bridge = basics.serial_bridge:main',
             'analog_serial_pub = basics.analog_serial_pub:main',
-            'serial_pot = basics.serial_pot:main',
+            'serial_pot = basics.serial_pot:main',                          'joystick_publisher = basics.joystick_publisher:main',
         ],
     },
 )
