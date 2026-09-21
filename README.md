@@ -374,6 +374,59 @@ rqt_graph
 
 ---
 
+## Control de Turtlesim con Joystick (ESP32)
+
+Este sistema lee un joystick analógico de dos ejes conectado a un ESP32 y lo usa para controlar el movimiento de la tortuga en Turtlesim, con control proporcional continuo.
+
+### Adquisición de datos (`joystick.ino`)
+
+El sketch lee dos pines analógicos del ESP32 correspondientes a los ejes X y Y del joystick, y envía ambos valores por serial en formato CSV (`x,y`) cada 20 ms.
+
+**Pines utilizados:**
+- **VRX → GPIO34**
+- **VRY → GPIO35**
+
+**Razón de elección:** se probaron inicialmente los pines GPIO26/GPIO27 (ADC2), pero presentaban lecturas erráticas (saturación repentina en 0 o 4095, sin relación con el movimiento físico del joystick). Esto se debe a que los pines ADC2 del ESP32 comparten hardware internamente con el radio WiFi/Bluetooth, lo que puede causar interferencia incluso sin usar esas funciones explícitamente. Se migró a **GPIO34 y GPIO35**, pertenecientes al **ADC1** (sin este conflicto), confirmando mediante pruebas en reposo que las lecturas se mantienen estables (variación de solo ±20 conteos sobre un valor de referencia de ~1968/1952).
+
+### Nodo publicador (`joystick_publisher.py`)
+
+Lee el puerto serial del ESP32 y publica los valores crudos del ADC (sin ningún procesamiento) en el tópico **`/joystick_raw`**, usando mensajes de tipo **`geometry_msgs/msg/Vector3`** (`x` e `y` para los dos ejes; `z` sin uso).
+
+Este nodo no tiene ninguna dependencia de Turtlesim ni realiza cálculos de velocidad — únicamente transporta el dato crudo del hardware a ROS2, cumpliendo con el requisito de separación de responsabilidades del enunciado.
+
+### Nodo de control (`turtle_controller.py`)
+
+Se suscribe a `/joystick_raw`, convierte los valores crudos del ADC en velocidades lineal y angular, y publica el resultado como mensaje **`geometry_msgs/msg/Twist`** en el tópico `/turtle1/cmd_vel`.
+
+#### Zona muerta
+
+Se definió una zona muerta del **5% del rango total del ADC** (±205 unidades alrededor del centro medido) en ambos ejes.
+
+**Razón de elección:** se midió el comportamiento del joystick en reposo (sin tocarlo) y se observó una variación natural de solo ±20 conteos sobre el valor central (ruido propio del ADC). Un margen del 5% (~205 conteos) es más de 10 veces ese ruido medido, garantizando que la tortuga permanezca completamente detenida en la posición neutral, sin sacrificar sensibilidad real de movimiento — se verificó que sigue existiendo suficiente rango fuera de la zona muerta para un control proporcional fino.
+
+#### Control proporcional
+
+La velocidad no es un valor fijo (On/Off): se calcula de forma continua como una función lineal de la distancia entre la lectura actual del ADC y el centro, fuera de la zona muerta. Mientras más inclinado esté el joystick, mayor es la velocidad resultante, hasta el límite máximo configurado.
+
+#### Límites de velocidad
+
+```python
+self.max_vel_lineal = 5.0   # m/s
+self.max_vel_angular = 5.0  # rad/s
+```
+
+**Razón de elección:** se probó inicialmente con 2.0 m/s y 2.0 rad/s, pero el movimiento de la tortuga resultaba poco perceptible, dificultando distinguir visualmente los distintos niveles de velocidad durante las pruebas. Se incrementó a 5.0, donde el movimiento de la tortuga es claramente visible y responde de forma ágil a la inclinación del joystick, sin perder controlabilidad ni salirse de forma descontrolada de la ventana de simulación de Turtlesim.
+
+#### Movimiento combinado
+
+Como los ejes X (velocidad angular) y Y (velocidad lineal) se procesan de forma independiente pero se publican juntos en el mismo mensaje `Twist`, una inclinación simultánea en diagonal produce automáticamente avance/retroceso y giro al mismo tiempo, generando un movimiento en curva.
+
+### Nodos activos durante la ejecución
+
+[Ver video de demostración del joystick](https://drive.google.com/file/d/1vsc9A6z8amgkDKcvC5yYFQy7jjU9OD6J/view?usp=sharing)
+
+---
+
 ## Problemas encontrados y solución
 
 1. **Error al compilar con colcon: `'distutils.core.setup()' was never called`**
