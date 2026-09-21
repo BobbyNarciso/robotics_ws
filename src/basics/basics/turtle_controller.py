@@ -17,14 +17,14 @@ class TurtleController(Node):
         # unos ±20 conteos (ruido normal del sensor), y 5% de 4095 (~205)
         # da margen suficiente para absorber ese ruido sin sacrificar
         # sensibilidad real de movimiento.
-        self.zona_muerta = int(0.05 * self.max_adc)  # ~205
+        self.zona_muerta = int(0.5 * self.max_adc)  # ~205
 
         # Límites de velocidad, elegidos tras pruebas en Turtlesim:
         # valores más altos hacen que la tortuga se salga rápido de
         # la ventana de simulación; estos permiten control fino y
         # visible sin perder el control del movimiento.
-        self.max_vel_lineal = 4.0   # m/s
-        self.max_vel_angular = 4.0  # rad/s
+        self.max_vel_lineal = 5.0   # m/s
+        self.max_vel_angular = 5.0  # rad/s
 
         self.subscription_ = self.create_subscription(
             Vector3,
