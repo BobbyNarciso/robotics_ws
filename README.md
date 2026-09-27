@@ -427,6 +427,80 @@ Como los ejes X (velocidad angular) y Y (velocidad lineal) se procesan de forma 
 
 ---
 
+## Archivo de Launch (`velocity_system.launch.py`)
+
+### ¿Qué es un archivo de launch?
+
+Un archivo de launch en ROS2 permite iniciar **múltiples nodos con un solo comando**, en lugar de tener que abrir una terminal distinta y ejecutar `ros2 run` para cada nodo por separado. Esto es especialmente útil cuando un sistema depende de que varios nodos trabajen en conjunto (como un publicador y un suscriptor), ya que evita el proceso manual de abrir terminales, sourcear el workspace en cada una, y lanzar cada nodo en el orden correcto.
+
+### Qué hace `velocity_system.launch.py`
+
+Este archivo de launch inicia simultáneamente los dos nodos del ejercicio de velocidad básica:
+
+- **`velocity_publisher`** — el nodo que publica los valores de velocidad simulados.
+- **`velocity_subscriber`** — el nodo que se suscribe y muestra esos valores en consola.
+
+Ambos nodos se lanzan con `output='screen'`, lo que hace que su salida (los mensajes de `get_logger().info()`) se imprima directamente en la misma terminal donde se ejecuta el launch, en lugar de quedar oculta en los archivos de log.
+
+### Estructura del archivo
+
+```python
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+
+def generate_launch_description():
+    return LaunchDescription([
+        Node(
+            package='basics',
+            executable='velocity_publisher',
+            output='screen'
+        ),
+        Node(
+            package='basics',
+            executable='velocity_subscriber',
+            output='screen'
+        ),
+    ])
+```
+
+Cada bloque `Node(...)` especifica:
+- `package`: el paquete de ROS2 donde vive el ejecutable (`basics`).
+- `executable`: el nombre del ejecutable tal como está registrado en `entry_points` dentro de `setup.py`.
+- `output='screen'`: redirige la salida del nodo a la terminal en vez de solo al log.
+
+La función `generate_launch_description()` es el punto de entrada que ROS2 busca automáticamente al ejecutar `ros2 launch` — debe retornar un objeto `LaunchDescription` que contenga la lista de acciones (en este caso, los dos nodos) a ejecutar.
+
+### Registro del archivo en `setup.py`
+
+Para que `colcon build` instale este archivo y `ros2 launch` pueda encontrarlo, se agregó la siguiente línea dentro de `data_files`:
+
+```python
+('share/' + package_name + '/launch', ['launch/velocity_system.launch.py']),
+```
+
+Esto copia el archivo desde `launch/` (dentro del paquete fuente) hacia `share/basics/launch/` (dentro del workspace instalado), que es donde `ros2 launch` busca los archivos de launch de un paquete.
+
+### Ejecución
+
+```bash
+ros2 launch basics velocity_system.launch.py
+```
+
+Este único comando reemplaza la necesidad de correr manualmente:
+
+```bash
+ros2 run basics velocity_publisher
+```
+```bash
+ros2 run basics velocity_subscriber
+```
+en dos terminales separadas.
+
+[Ver video de demostracion del uso de lauch](https://drive.google.com/file/d/12w8EGk1gz-YxVVqBTSso2tALWJloiyQ9/view?usp=sharing)
+
+---
+
 ## Problemas encontrados y solución
 
 1. **Error al compilar con colcon: `'distutils.core.setup()' was never called`**
