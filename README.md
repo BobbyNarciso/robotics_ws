@@ -501,6 +501,89 @@ en dos terminales separadas.
 
 ---
 
+## Archivo de Launch (`turtle_joy_controller.py`)
+
+### ¿Qué es un archivo de launch?
+
+Un archivo de launch en ROS2 permite iniciar **múltiples nodos con un solo comando**, en lugar de tener que abrir una terminal distinta y ejecutar `ros2 run` para cada nodo por separado. Esto es especialmente útil cuando un sistema depende de que varios nodos trabajen en conjunto (como en este caso, la simulación y dos nodos propios), ya que evita el proceso manual de abrir terminales, sourcear el workspace en cada una, y lanzar cada nodo en el orden correcto.
+
+### Qué hace `turtle_joy_controller.py`
+
+Este archivo de launch inicia simultáneamente los tres nodos del sistema de control por joystick:
+
+- **`turtlesim_node`** — la simulación de la tortuga (del paquete `turtlesim`).
+- **`joystick_publisher`** — lee el joystick desde el ESP32 por serial y publica los valores crudos.
+- **`turtle_controller`** — convierte esos valores en velocidades y mueve la tortuga.
+
+Los tres nodos se lanzan con `output='screen'`, lo que hace que su salida (los mensajes de `get_logger().info()`) se imprima directamente en la misma terminal donde se ejecuta el launch, en lugar de quedar oculta en los archivos de log.
+
+### Estructura del archivo
+
+```python
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+
+def generate_launch_description():
+    return LaunchDescription([
+        Node(
+            package='turtlesim',
+            executable='turtlesim_node',
+            output='screen'
+        ),
+        Node(
+            package='basics',
+            executable='joystick_publisher',
+            output='screen'
+        ),
+        Node(
+            package='basics',
+            executable='turtle_controller',
+            output='screen'
+        ),
+    ])
+```
+
+Cada bloque `Node(...)` especifica:
+- `package`: el paquete de ROS2 donde vive el ejecutable (`turtlesim` para el primero, `basics` para los otros dos).
+- `executable`: el nombre del ejecutable tal como está registrado en `entry_points` dentro de `setup.py`.
+- `output='screen'`: redirige la salida del nodo a la terminal en vez de solo al log.
+
+La función `generate_launch_description()` es el punto de entrada que ROS2 busca automáticamente al ejecutar `ros2 launch` — debe retornar un objeto `LaunchDescription` que contenga la lista de acciones (en este caso, los tres nodos) a ejecutar.
+
+### Registro del archivo en `setup.py`
+
+Para que `colcon build` instale este archivo y `ros2 launch` pueda encontrarlo, se agregó a la lista existente dentro de `data_files`:
+
+```python
+('share/' + package_name + '/launch', ['launch/velocity_system.launch.py', 'launch/turtle_joy_controller.py']),
+```
+
+Esto copia ambos archivos desde `launch/` (dentro del paquete fuente) hacia `share/basics/launch/` (dentro del workspace instalado), que es donde `ros2 launch` busca los archivos de launch de un paquete.
+
+### Ejecución
+
+```bash
+ros2 launch basics turtle_joy_controller.py
+```
+
+Este único comando reemplaza la necesidad de correr manualmente:
+
+```bash
+ros2 run turtlesim turtlesim_node
+```
+```bash
+ros2 run basics joystick_publisher
+```
+```bash
+ros2 run basics turtle_controller
+```
+en tres terminales separadas.
+
+[Ver video de demostración del uso de launch](https://drive.google.com/file/d/1fr7DSQNxwyJ3zriAlLHhBGjmQ8UhiDNw/view?usp=sharing)
+
+---
+
 ## Problemas encontrados y solución
 
 1. **Error al compilar con colcon: `'distutils.core.setup()' was never called`**
