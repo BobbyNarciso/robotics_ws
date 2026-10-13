@@ -1,0 +1,27 @@
+# Parámetros para el control de Turtlesim con joystick comercial.
+# Xbox / SDL2 -> axes:    0 LX, 1 LY, 2 RX, 3 RY, 4 LT, 5 RT, 6 D-pad X, 7 D-pad Y
+#                buttons: 0 A, 1 B, 2 X, 3 Y, 4 Back, 5 Guide, 6 Start, 7 LS, 8 RS, 9 LB, 10 RB
+
+joy_node:
+  ros__parameters:
+    device_id: 0
+    deadzone: 0.05
+    autorepeat_rate: 20.0
+
+joy_turtle_controller:
+  ros__parameters:
+    axis_linear: 3            # stick izquierdo vertical
+    axis_angular: 0           # stick derecho horizontal
+    invert_angular: false
+    scale_linear: 2.0         # m/s con el stick al tope
+    scale_angular: 2.0        # rad/s con el stick al tope
+    turbo_factor: 2.5         # multiplicador con RB presionado
+    deadzone: 0.10            # zona muerta propia (además de la del driver)
+    require_enable_button: false
+    button_enable: 9          # LB / L1
+    button_turbo: 10          # RB / R1
+    button_pen: 0             # A / Cruz
+    button_clear: 2           # X / Cuadrado
+    button_reset: 3           # Y / Triángulo
+    publish_rate: 20.0
+    joy_timeout: 0.5

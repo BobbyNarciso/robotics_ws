@@ -584,6 +584,90 @@ en tres terminales separadas.
 
 ---
 
+## Control de Turtlesim con joystick comercial (Xbox Series S)
+
+### Descripción
+
+Un control Xbox Series S conectado por **USB** controla la tortuga de Turtlesim. Se eligió el cable y no Bluetooth para evitar problemas de emparejamiento y latencia. Un archivo de launch levanta todo el sistema con un solo comando.
+
+### Arquitectura
+
+```
+Control Xbox → joy_node → /joy (sensor_msgs/Joy) → joy_turtle_controller → /turtle1/cmd_vel (Twist) → turtlesim
+```
+
+- **`joy_node`** (paquete `joy`): lee el control con SDL2 y publica en `/joy` los ejes (`axes`) y botones (`buttons`).
+- **`joy_turtle_controller`** (nodo propio): convierte `/joy` en velocidades `Twist` y llama servicios de Turtlesim con los botones.
+- **`turtlesim_node`**: la simulación.
+
+Los índices de ejes y botones se identificaron con `ros2 topic echo /joy`, moviendo cada stick y presionando cada botón.
+
+### Mapeo de entradas
+
+| Entrada | Índice | Función |
+|---|---|---|
+| Stick derecho vertical | `axes[3]` | Velocidad lineal |
+| Stick izquierdo horizontal | `axes[0]` | Velocidad angular |
+| RB | `buttons[10]` | Turbo (×2.5) |
+| A | `buttons[0]` | Pluma |
+| X | `buttons[2]` | Limpiar |
+| Y | `buttons[3]` | Reiniciar |
+
+### Decisiones tomadas
+
+- **Ejes:** giro con el stick izquierdo y avance con el derecho, para separar los dos movimientos en cada mano.
+- **Zona muerta:** doble filtro, 0.05 en el driver (`joy_node`) y 0.10 en el nodo, para que el drift de los sticks no mueva la tortuga en reposo.
+- **Velocidades:** escala de 2.0 m/s y 2.0 rad/s con el stick al tope (el eje va de -1.0 a 1.0), con turbo en RB.
+- **Botón de habilitación:** el nodo lo soporta (`require_enable_button`), pero se desactivó por defecto para mover la tortuga solo con los sticks. Se reactiva con `enable_button:=true`.
+- **Seguridad:** si `/joy` deja de llegar por más de 0.5 s (`joy_timeout`), el nodo deja de publicar velocidad.
+- **Parámetros en yaml:** todo se configura en `config/joy_turtle.yaml`, sin editar código.
+
+### Archivo de launch (`joy_turtle.launch.py`)
+
+Inicia `joy_node`, `turtlesim_node` y `joy_turtle_controller`, cargando el yaml en los nodos que lo necesitan. Acepta dos argumentos:
+
+- `device_id` (default `0`): índice del control.
+- `enable_button` (default `false`): exigir mantener un botón para mover la tortuga.
+
+Los archivos de `launch/` y `config/` se instalan automáticamente con `glob` en `data_files` de `setup.py`:
+
+```python
+(os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
+(os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
+```
+
+### Comandos
+
+```bash
+sudo apt install ros-jazzy-joy
+cd ~/robotics_ws
+colcon build --packages-select basics --symlink-install
+source install/setup.bash
+ros2 launch basics joy_turtle.launch.py
+```
+
+Opciones:
+
+```bash
+ros2 launch basics joy_turtle.launch.py enable_button:=true
+ros2 launch basics joy_turtle.launch.py device_id:=1
+```
+
+Comprobación:
+
+```bash
+ros2 node list
+ros2 topic echo /joy
+ros2 topic echo /turtle1/cmd_vel
+ros2 param get /joy_turtle_controller require_enable_button
+rqt_graph
+```
+
+### Video de demostración
+
+[Ver video del control con joystick comercial](https://drive.google.com/file/d/1-EGEmsaDxPpm8P_m8D1LftnVc1ZBcBmX/view?usp=sharing)
+
+---
 ## Problemas encontrados y solución
 
 1. **Error al compilar con colcon: `'distutils.core.setup()' was never called`**

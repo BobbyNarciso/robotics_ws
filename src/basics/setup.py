@@ -1,4 +1,6 @@
 from setuptools import find_packages, setup
+import os 
+from glob import glob
 
 package_name = 'basics'
 
@@ -9,7 +11,9 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
-        ('share/' + package_name, ['package.xml']), ('share/'+ package_name + '/launch', ['launch/velocity_system.launch.py', 'launch/turtle_joy_controller.py']),
+        ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
+        (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -34,7 +38,7 @@ setup(
             'analog_serial_pub = basics.analog_serial_pub:main',
             'serial_pot = basics.serial_pot:main',
             'joystick_publisher = basics.joystick_publisher:main',
-            'turtle_controller = basics.turtle_controller:main',
+            'turtle_controller = basics.turtle_controller:main','joy_turtle_controller = basics.joy_turtle_controller:main',
         ],
     },
 )
