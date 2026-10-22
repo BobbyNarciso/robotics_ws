@@ -668,6 +668,133 @@ rqt_graph
 [Ver video del control con joystick comercial](https://drive.google.com/file/d/1-EGEmsaDxPpm8P_m8D1LftnVc1ZBcBmX/view?usp=sharing)
 
 ---
+
+# robot_description — Colmibot
+
+Paquete de ROS 2 Jazzy con la representación virtual del **Colmibot**, un robot móvil diferencial (dos ruedas motrices y dos ruedas locas). Contiene el modelo URDF/Xacro, los meshes generados desde el CAD de SolidWorks y los archivos de lanzamiento para visualizarlo en RViz2.
+
+**Equipo:** [nombres de los integrantes]
+
+---
+
+## Herramientas y recursos empleados
+
+| Herramienta | Uso |
+|---|---|
+| SolidWorks | Modelado del ensamble del robot |
+| SW URDF Exporter (`sw_urdf_exporter`) | Exportar el ensamble a URDF y STL |
+| ROS 2 Jazzy (Ubuntu 24.04) | Sistema base |
+| `xacro` | URDF parametrizado con propiedades |
+| `robot_state_publisher` | Publica el árbol TF a partir del URDF |
+| `joint_state_publisher_gui` | Sliders para mover las ruedas |
+| `rviz2` | Visualización del modelo |
+| `check_urdf` (`liburdfdom-tools`) | Validar el URDF |
+| Python: `trimesh`, `fast-simplification`, `numpy` | Script que corrige y aligera los meshes |
+| VS Code y Git/GitHub | Desarrollo y control de versiones |
+
+---
+
+## Procedimiento para generar la representación virtual
+
+1. **Modelo CAD.** Se modeló el ensamble completo en SolidWorks (chasis, motorreductores, electrónica, baterías, ruedas motrices y ruedas locas).
+2. **Sistemas de coordenadas y ejes.** Con `sw_urdf_exporter` se definió el origen del robot, un eje de giro para cada rueda motriz (`RJoin`, `Ljoin`) y se agruparon los componentes en tres links: `Cuerpo`, `RuedaDER` y `RuedaIzq`. Las ruedas locas quedaron dentro del cuerpo, porque no tienen movimiento.
+3. **Exportación.** El exportador generó un paquete de ROS 1 (`catkin`, launch en XML) con el `.urdf`, los STL y el CSV de propiedades.
+4. **Revisión del export.** Se encontraron varios problemas (ver sección *Problemas encontrados*) y se volvió a exportar el ensamble con los STL corregidos.
+5. **Preparación de meshes.** Un script de Python separa, reorienta y aligera los STL para que se vean bien en RViz sin pesar decenas de megas.
+6. **Migración a ROS 2.** Se creó un paquete `ament_cmake` nuevo, y el URDF se reescribió como Xacro con las rutas `package://robot_description/...`.
+7. **Validación.** Se comprobó con `check_urdf` y se visualizó en RViz moviendo las ruedas con los sliders.
+
+---
+
+## Decisiones de diseño y simplificaciones
+
+| Decisión | Razón |
+|---|---|
+| **Marco `base_link` con x adelante, y izquierda, z arriba** (REP-103) | Es la convención de ROS. El marco de SolidWorks tenía el frente en +Y, así que los meshes se giraron −90° en z |
+| **Link raíz `base_footprint` con un joint fijo a `base_link`** | Permite girar todo el robot de una vez cambiando una sola propiedad (`body_yaw`) |
+| **Ruedas locas fijas, dentro del cuerpo** | No participan en el movimiento. Son esferas sin fricción solo en la colisión |
+| **Ruedas motrices como joints `continuous` con el mismo eje `(0 1 0)`** | Un giro positivo en ambas ruedas hace avanzar el robot |
+| **Colisiones con primitivas** (cilindro para el chasis, cilindros para ruedas, esferas para ruedas locas) | La malla visual tiene más de 160 mil caras y no sirve para física |
+| **Cuerpo aligerado de ~447 mil a ~163 mil caras** | Menos peso en RViz. La simplificación se hace pieza por pieza para no perder componentes pequeños |
+| **Masa e inercia tomadas del CAD**, rotadas a `base_link` | Conserva los valores reales del ensamble |
+| **Dimensiones medidas del CAD** | Radio de rueda 0.03 m, separación entre ruedas 0.174 m, altura de eje 0.0165 m |
+
+**Simplificaciones:** el cuerpo es un solo link rígido (motores, baterías y placas no se modelan por separado) y no se incluyen sensores (cámara, IMU, ToF) como links.
+
+---
+
+## Estructura del paquete
+
+```
+robot_description/
+├── CMakeLists.txt
+├── package.xml
+├── README.md
+├── launch/
+│   └── display.launch.py       # robot_state_publisher + sliders + RViz
+├── meshes/
+│   ├── base_link.stl           # cuerpo (aligerado)
+│   ├── wheel_left.stl
+│   └── wheel_right.stl
+├── rviz/
+│   └── colmibot.rviz           # configuración de RViz
+└── urdf/
+    └── colmibot.urdf.xacro     # modelo del robot
+```
+[Si en tu paquete hay otros archivos (por ejemplo `gazebo.launch.py`), agrégalos aquí o bórralos del repo si no los usaste.]
+
+**Árbol del robot:**
+```
+base_footprint
+└── base_link            (cuerpo + ruedas locas)
+    ├── wheel_left       (wheel_left_joint, continuous)
+    └── wheel_right      (wheel_right_joint, continuous)
+```
+
+---
+
+## Comandos para ejecutar y visualizar el modelo
+
+**Dependencias:**
+```bash
+sudo apt install ros-jazzy-xacro ros-jazzy-robot-state-publisher \
+  ros-jazzy-joint-state-publisher-gui ros-jazzy-rviz2 liburdfdom-tools
+```
+
+**Compilar:**
+```bash
+cd ~/robotics_ws
+colcon build --packages-select robot_description --symlink-install
+source install/setup.bash
+```
+
+**Validar el URDF:**
+```bash
+xacro src/robot_description/urdf/colmibot.urdf.xacro use_gazebo:=false > /tmp/colmibot.urdf
+check_urdf /tmp/colmibot.urdf
+```
+
+**Visualizar en RViz con sliders:**
+```bash
+ros2 launch robot_description display.launch.py
+```
+Al mover los sliders `wheel_left_joint` y `wheel_right_joint`, cada rueda gira sobre su eje.
+
+**Inspeccionar:**
+```bash
+ros2 topic echo /joint_states
+ros2 run tf2_tools view_frames
+```
+
+**Girar todo el robot:** edita `body_yaw` en `urdf/colmibot.urdf.xacro` (en radianes; `1.5708` = 90°) y vuelve a lanzar.
+
+---
+
+## Video de demostración
+
+[Ver video del modelo funcionando en RViz](https://drive.google.com/file/d/1ARrVsrTXGCGZD2KZFuEFYmJLc9jiqunQ/view?usp=sharing)
+
+---
 ## Problemas encontrados y solución
 
 1. **Error al compilar con colcon: `'distutils.core.setup()' was never called`**
@@ -689,3 +816,26 @@ rqt_graph
 5. **Solo un proceso puede usar el puerto serial `/dev/ttyUSB0` a la vez**
    - Causa: tanto el ejemplo del LED como el del potenciómetro usan el mismo ESP32 y puerto serial, por lo que no se pueden correr ambos sistemas simultáneamente.
    - Solución: se cargó el sketch correspondiente a cada ejercicio (`LED_Serial.ino` o `ADC_Pot.ino`) desde el IDE de Arduino antes de correr los nodos de ROS2 asociados a ese ejercicio.
+
+6. **El export de SolidWorks era de ROS 1** (`catkin`, `.launch` en XML, dependencia de `gazebo` clásico).
+   - Solución: se creó un paquete `ament_cmake` nuevo, con launch en Python, y se reescribió el URDF como Xacro.
+
+7. **Los tres STL contenían el robot completo.** En RViz habrían aparecido tres robots encimados.
+   - Causa: el exportador guardó el ensamble entero en cada STL.
+   - Solución: se volvió a exportar el ensamble con cada STL conteniendo solo su pieza (ruedas de ~7 mil caras cada una).
+
+8. **Los meshes pesaban 69 MB.**
+   - Solución: un script de Python (`trimesh` y `fast-simplification`) simplifica el cuerpo pieza por pieza (de 447k a 163k caras) y usa primitivas para la colisión.
+
+9. **Joints mal exportados:** las ruedas salieron como `revolute` con límite 0 (no podían girar), la rueda izquierda con 1° de inclinación y los ejes en sentidos opuestos.
+   - Solución: se redefinieron como `continuous`, sin inclinación y con el mismo eje, para que un giro positivo avance en las dos ruedas.
+
+10. **Centro de masa incorrecto en el primer export** (a 4.8 cm de lado y 0.5 cm de altura, poco realista).
+   - Solución: se volvió a exportar y se usaron los valores corregidos (centro de masa casi centrado y a 4.8 cm de altura), rotados al marco `base_link`.
+
+11. **Nombre del paquete inválido:** `CLM-EnsambleColmibot` tiene mayúsculas y guiones, y ROS 2 solo acepta minúsculas y guiones bajos.
+   - Solución: se creó el paquete con el nombre `robot_description`.
+
+12. **Al girar el cuerpo, las ruedas no lo seguían.** Cambiar el `rpy` del `<visual>` solo gira el dibujo, no los joints de las ruedas.
+   - Solución: se agregó un link raíz `base_footprint` con un joint fijo cuyo `rpy` gira todo lo que cuelga de `base_link`.
+
