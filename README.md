@@ -796,8 +796,6 @@ ros2 run tf2_tools view_frames
 
 ## Colmibot: representación virtual y simulación en Gazebo
 
-Equipo: `[NOMBRES DEL EQUIPO]`
-
 El paquete `robot_description` contiene el modelo virtual del **Colmibot** (robot móvil diferencial con dos ruedas motrices y dos ruedas locas), exportado desde SolidWorks, visualizable en **RViz2** y simulable en **Gazebo Harmonic**, donde se controla con el joystick Xbox.
 
 ### Herramientas utilizadas
@@ -944,10 +942,8 @@ Acepta el argumento `rviz` (por defecto `false`).
 ### Comandos de ejecución
 
 ```bash
-sudo apt install ros-jazzy-joy ros-jazzy-teleop-twist-joy
 cd ~/robotics_ws
-colcon build --packages-select robot_description --symlink-install
-source install/setup.bash
+colcon build
 ros2 launch robot_description gazebo_joy.launch.py
 ```
 
@@ -969,7 +965,7 @@ gz topic -e -t /cmd_vel         # el mensaje ya dentro de Gazebo
 rqt_graph
 ```
 
-Para cambiar parámetros sin recompilar (con `--symlink-install` basta relanzar), editar `config/joy_teleop.yaml`; también se puede probar en caliente:
+Para cambiar parámetros sin recompilar, editar `config/joy_teleop.yaml`:
 
 ```bash
 ros2 param set /teleop_twist_joy_node scale_linear.x 0.6
@@ -981,7 +977,7 @@ ros2 param set /teleop_twist_joy_node scale_linear.x 0.6
 ros2 launch robot_description gazebo_joy.launch.py rviz:=true
 ```
 
-Los dos programas son **procesos independientes**: Gazebo simula la física y publica `/tf`, `/odom`, `/joint_states` y `/clock` mediante el puente; RViz solo se suscribe a esos tópicos y los dibuja (`Fixed Frame: odom`, configuración en `rviz/gazebo.rviz`). Para que los tiempos coincidan, `robot_state_publisher` usa el reloj de la simulación (`use_sim_time`). En este modo no se abre `joint_state_publisher_gui`, porque publicaría posiciones falsas encima de las de Gazebo.
+Los dos programas son **procesos independientes**: Gazebo simula la física y publica `/tf`, `/odom`, `/joint_states` y `/clock` mediante el puente; RViz solo se suscribe a esos tópicos y los dibuja (`Fixed Frame: odom`, configuración en `rviz/gazebo.rviz`). Para que los tiempos coincidan, `robot_state_publisher` usar el reloj de la simulación (`use_sim_time`). En este modo no se abre `joint_state_publisher_gui`, porque publicaría posiciones falsas encima de las de Gazebo.
 
 ### Limitaciones conocidas
 
