@@ -788,11 +788,209 @@ ros2 run tf2_tools view_frames
 
 **Girar todo el robot:** edita `body_yaw` en `urdf/colmibot.urdf.xacro` (en radianes; `1.5708` = 90°) y vuelve a lanzar.
 
----
-
 ## Video de demostración
 
 [Ver video del modelo funcionando en RViz](https://drive.google.com/file/d/1ARrVsrTXGCGZD2KZFuEFYmJLc9jiqunQ/view?usp=sharing)
+
+---
+
+## Colmibot: representación virtual y simulación en Gazebo
+
+Equipo: `[NOMBRES DEL EQUIPO]`
+
+El paquete `robot_description` contiene el modelo virtual del **Colmibot** (robot móvil diferencial con dos ruedas motrices y dos ruedas locas), exportado desde SolidWorks, visualizable en **RViz2** y simulable en **Gazebo Harmonic**, donde se controla con el joystick Xbox.
+
+### Herramientas utilizadas
+
+| Herramienta | Uso |
+|---|---|
+| SolidWorks + `sw_urdf_exporter` | Exportar el ensamble a URDF y mallas STL |
+| ROS 2 Jazzy (Ubuntu 24.04) | Middleware |
+| `robot_state_publisher` | Publicar el TF del robot a partir del URDF |
+| `joint_state_publisher_gui` | Mover las ruedas con sliders en RViz |
+| RViz2 | Visualizar el modelo y el TF |
+| Gazebo Harmonic (`ros_gz_sim`) | Simulación física |
+| `ros_gz_bridge` | Puente de tópicos ROS 2 ↔ Gazebo |
+| `joy` + `teleop_twist_joy` | Leer el control Xbox y convertirlo en `/cmd_vel` |
+| VS Code, `check_urdf`, `rqt_graph` | Edición, validación y depuración |
+
+### Procedimiento para generar la representación virtual
+
+1. Se exportó el ensamble desde SolidWorks con el exportador de URDF, definiendo `base_link` y dos eslabones de rueda con articulaciones **continuas**. Hubo que repetir la exportación varias veces (ver *Problemas*).
+2. El exportador genera un paquete de **ROS 1** (catkin, `.launch` en XML, `package://` con el nombre del proyecto). Se conservó el URDF y las mallas del exportador y solo se cambió lo que pertenece a ROS 1:
+
+| ROS 1 (exportador) | ROS 2 (este paquete) |
+|---|---|
+| `catkin`, `CMakeLists.txt` de catkin | `ament_cmake` |
+| `package.xml` formato 2 con `run_depend` | formato 3 con `exec_depend` |
+| `roslaunch` en XML | launch en Python |
+| `rviz` | `rviz2` |
+| `gazebo` clásico, `spawn_model` | Gazebo Harmonic, `ros_gz_sim create` |
+| `libgazebo_ros_diff_drive` | plugin `gz-sim-diff-drive-system` |
+| nombre `CLM-EnsambleColmibot` | paquete `robot_description` (minúsculas y guion bajo) |
+
+3. Se corrigieron las rutas de mallas a `package://robot_description/meshes/...`.
+4. Se validó con `check_urdf` y se probó en RViz con sliders antes de pasar a Gazebo.
+
+### Estructura del paquete
+
+```
+robot_description/
+├── CMakeLists.txt
+├── package.xml
+├── urdf/CLM-EnsambleColmibot.urdf
+├── meshes/                 base_link.STL, LeftLink.STL, RightWheel.STL
+├── launch/
+│   ├── display.launch.py       # RViz + sliders
+│   ├── gazebo.launch.py        # Gazebo + bridge (+ RViz opcional)
+│   └── gazebo_joy.launch.py    # Gazebo + bridge + joystick
+├── config/
+│   ├── joint_names_CLM-EnsambleColmibot.yaml   # del exportador, sin uso
+│   └── joy_teleop.yaml         # mapeo y velocidades del joystick
+└── rviz/                   urdf.rviz, gazebo.rviz
+```
+
+### Decisiones de diseño y simplificaciones
+
+- **Tres eslabones.** Toda la electrónica va en un solo eslabón rígido (`base_link`); las ruedas motrices son `LeftLink` y `RightWheel`, unidas por `LeftW` y `RightW`. Los componentes que no se mueven no necesitan su propio eslabón.
+- **Datos físicos del exportador.** Masa total 2.2668 kg (ruedas 0.019358 kg cada una), con su centro de masa y tensor de inercia. Radio de rueda 0.03 m, ancho 0.012 m, separación entre ruedas 0.174 m.
+- **Mallas visuales completas** (la de `base_link` pesa ~22 MB), sin decimar.
+- **Colisiones con primitivas.** La malla de `base_link` tiene unas 447 mil caras, demasiado pesada para el motor de física. Se usó un cilindro (r = 0.1 m, h = 0.1537 m) para el cuerpo, cilindros para las ruedas y dos esferas (r = 0.0135 m, en y = ±0.08 m) para las **ruedas locas**, que no son articulaciones, solo apoyos sin fricción (`mu = 0` en `base_link`).
+- **Ruedas con el mismo sentido.** Los dos ejes quedaron con `axis = -1 0 0` y los marcos de rueda alineados con `base_link`, de modo que un giro positivo en ambas hace avanzar el robot. El giro de montaje de las mallas se pasó al `<visual>` y al `<inertial>`.
+- **Sin `base_footprint`**, para mantener la estructura del exportador.
+- **Frente del robot = +Y** de `base_link` (así quedó el sistema de coordenadas del ensamble). No cumple la convención REP-103 (frente en +X); ver *Limitaciones*.
+- Se quitó el `<limit>` de `LeftW` (esfuerzo y velocidad en 0 pueden bloquear la articulación en Gazebo).
+
+### Visualización en RViz (requisito)
+
+```bash
+cd ~/robotics_ws
+colcon build --packages-select robot_description --symlink-install
+source install/setup.bash
+ros2 launch robot_description display.launch.py
+```
+
+Se abre RViz con el modelo (`Fixed Frame: base_link`) y una ventana con sliders para girar `LeftW` y `RightW`.
+
+[Ver video del modelo en RViz](PENDIENTE_LINK_VIDEO_RVIZ)
+
+### Simulación en Gazebo: modificaciones al URDF
+
+Se agregaron bloques `<gazebo>` al final del URDF:
+
+- Fricción de las ruedas (`mu1 = mu2 = 1.0`, `kp = 1e6`, `kd = 100`) y fricción nula en `base_link`.
+- Plugin **`gz-sim-diff-drive-system`**: recibe `/cmd_vel` y convierte velocidad lineal y angular en velocidad de cada rueda.
+
+| Parámetro | Valor |
+|---|---|
+| `left_joint` / `right_joint` | `LeftW` / `RightW` |
+| `wheel_separation` | 0.174 m |
+| `wheel_radius` | 0.03 m |
+| `max_linear_acceleration` | 1.0 m/s² |
+| `max_angular_acceleration` | 3.0 rad/s² |
+| `topic` / `odom_topic` / `tf_topic` | `/cmd_vel` / `/odom` / `/tf` |
+| `frame_id` / `child_frame_id` | `odom` / `base_link` |
+| `odom_publish_frequency` | 50 Hz |
+
+- Plugin **`gz-sim-joint-state-publisher-system`**: publica el ángulo de `LeftW` y `RightW` en `/joint_states`.
+
+### Control con joystick Xbox: arquitectura de comunicación
+
+```
+Control Xbox ─► joy_node ─/joy─► teleop_twist_joy ─/cmd_vel─► ros_gz_bridge ─► Gazebo (DiffDrive) ─► ruedas
+                (ROS 2)          (ROS 2)           (Twist)     (ROS 2 ↔ gz)        │
+                                                                                   ├─ /odom, /tf, /clock
+RViz ◄── /tf, /joint_states, /robot_description (robot_state_publisher) ◄─ bridge ◄─┘
+```
+
+| Nodo / componente | Entrada | Salida | Función |
+|---|---|---|---|
+| `joy_node` | Control USB | `/joy` (`sensor_msgs/Joy`) | Ejes y botones del control |
+| `teleop_twist_joy` | `/joy` | `/cmd_vel` (`geometry_msgs/Twist`) | Convierte ejes en velocidades; solo publica con el botón de habilitación presionado |
+| `ros_gz_bridge` | `/cmd_vel` | mismo tópico en Gazebo | Puente; devuelve `/odom`, `/tf`, `/joint_states` y `/clock` a ROS 2 |
+| Plugin DiffDrive | `/cmd_vel` | velocidad de las ruedas, `/odom` | Cinemática diferencial |
+| `robot_state_publisher` | `/robot_description`, `/joint_states` | TF de los eslabones | Estructura del robot |
+
+El joystick **no usa ningún plugin de Gazebo**: Gazebo solo recibe un `Twist` en `/cmd_vel`, igual que si viniera de cualquier otro nodo. Conectar los comandos de velocidad con la simulación es justamente lo que hace el puente.
+
+### Mapeo del control
+
+Los índices se verificaron con `ros2 topic echo /joy` (en `config/joy_teleop.yaml`):
+
+| Entrada | Función |
+|---|---|
+| RB (mantener) | Habilitar movimiento |
+| LB + RB | Modo turbo |
+| Stick izquierdo vertical (`axes[1]`) | Avance / reversa |
+| Stick izquierdo horizontal (`axes[0]`) | Giro |
+
+| Parámetro (yaml) | Normal | Turbo |
+|---|---|---|
+| `scale_linear.x` | 0.3 m/s | 0.6 m/s |
+| `scale_angular.yaw` | 1.5 rad/s | 2.5 rad/s |
+
+Se mantuvo un **botón de habilitación** como medida de seguridad: si se suelta RB, el robot se detiene.
+
+### Archivo launch del sistema (`gazebo_joy.launch.py`)
+
+Inicia con un solo comando:
+
+1. `gazebo.launch.py` (Gazebo vacío, robot, `robot_state_publisher`, `ros_gz_bridge`).
+2. `joy_node`.
+3. `teleop_twist_joy`, con `config/joy_teleop.yaml`.
+
+Acepta el argumento `rviz` (por defecto `false`).
+
+### Comandos de ejecución
+
+```bash
+sudo apt install ros-jazzy-joy ros-jazzy-teleop-twist-joy
+cd ~/robotics_ws
+colcon build --packages-select robot_description --symlink-install
+source install/setup.bash
+ros2 launch robot_description gazebo_joy.launch.py
+```
+
+Con control: mantener **RB** y mover el stick izquierdo. Sin control, para probar solo la simulación:
+
+```bash
+ros2 launch robot_description gazebo.launch.py
+ros2 run teleop_twist_keyboard teleop_twist_keyboard
+```
+
+Comprobación de la cadena de comunicación:
+
+```bash
+ros2 node list                  # /joy_node, /teleop_twist_joy_node, /ros_gz_bridge...
+ros2 topic echo /joy
+ros2 topic echo /cmd_vel        # con RB presionado
+ros2 topic echo /odom
+gz topic -e -t /cmd_vel         # el mensaje ya dentro de Gazebo
+rqt_graph
+```
+
+Para cambiar parámetros sin recompilar (con `--symlink-install` basta relanzar), editar `config/joy_teleop.yaml`; también se puede probar en caliente:
+
+```bash
+ros2 param set /teleop_twist_joy_node scale_linear.x 0.6
+```
+
+### Ampliación: RViz y Gazebo simultáneos
+
+```bash
+ros2 launch robot_description gazebo_joy.launch.py rviz:=true
+```
+
+Los dos programas son **procesos independientes**: Gazebo simula la física y publica `/tf`, `/odom`, `/joint_states` y `/clock` mediante el puente; RViz solo se suscribe a esos tópicos y los dibuja (`Fixed Frame: odom`, configuración en `rviz/gazebo.rviz`). Para que los tiempos coincidan, `robot_state_publisher` usa el reloj de la simulación (`use_sim_time`). En este modo no se abre `joint_state_publisher_gui`, porque publicaría posiciones falsas encima de las de Gazebo.
+
+### Limitaciones conocidas
+
+- El frente del modelo es +Y, mientras que el plugin de odometría asume un frente en +X. En Gazebo el robot se mueve bien; en RViz con `Fixed Frame: odom`, la pose del modelo puede verse girada 90° respecto a la dirección de avance. Se resolvería re-exportando desde SolidWorks con el eje X al frente.
+- Las mallas STL no conservan colores; los colores se asignaron en el URDF.
+
+### Video de demostración — Gazebo con joystick
+
+[Ver video del robot en Gazebo controlado con el joystick](https://drive.google.com/file/d/1sJDFQZOTLMI83v5jRBXd_XZ0j5rkUoSk/view?usp=sharing)
 
 ---
 ## Problemas encontrados y solución
@@ -839,3 +1037,18 @@ ros2 run tf2_tools view_frames
 12. **Al girar el cuerpo, las ruedas no lo seguían.** Cambiar el `rpy` del `<visual>` solo gira el dibujo, no los joints de las ruedas.
    - Solución: se agregó un link raíz `base_footprint` con un joint fijo cuyo `rpy` gira todo lo que cuelga de `base_link`.
 
+13. **Las primeras exportaciones de SolidWorks no servían**
+    - Causa: las mallas de las ruedas contenían todo el ensamble, las articulaciones salían como `revolute`/`prismatic` en vez de `continuous`, el centro de masa era incorrecto y una rueda quedaba vacía con 2.3 kg.
+    - Solución: se corrigió el ensamble y se re-exportó hasta obtener masas, inercias y mallas correctas, validando con `check_urdf` y los valores físicos del URDF.
+
+14. **`ros2 launch` no encontraba las mallas o fallaba la carga del modelo**
+    - Causa: las rutas de las mallas apuntaban al nombre del proyecto de ROS 1 y, en Linux, los nombres de archivo distinguen mayúsculas (`LeftLink.STL`).
+    - Solución: se cambiaron a `package://robot_description/meshes/...` con el nombre exacto del archivo, y se recompiló con `--symlink-install`.
+
+15. **Las ruedas giraban en sentidos opuestos y cada una tenía su propio sistema de coordenadas en RViz**
+    - Causa: el exportador deja las ruedas con marcos reflejados y ejes de signo contrario, así que un mismo comando hacía girar una rueda hacia adelante y la otra hacia atrás.
+    - Solución: se alinearon los marcos de las ruedas con `base_link`, se pasó el giro de montaje de las mallas al `<visual>`/`<inertial>`, y los dos ejes quedaron con `axis = -1 0 0`. Se verificó numéricamente que ambas avanzan hacia +Y.
+
+16. **La simulación era inestable con la malla completa como colisión**
+    - Causa: la malla de `base_link` tiene unas 447 mil caras.
+    - Solución: se usaron primitivas (cilindros y esferas) para las colisiones y se dejó la malla completa solo para la parte visual.

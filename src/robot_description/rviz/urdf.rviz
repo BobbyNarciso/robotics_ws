@@ -1,0 +1,136 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+    - Class: rviz_default_plugins/RobotModel
+      Name: RobotModel
+      Enabled: true
+      Description Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robot_description
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+      Marker Scale: 0.3
+      Show Names: false
+      Show Axes: true
+  Global Options:
+    Fixed Frame: base_link
+    Frame Rate: 30
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 0.8
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0.05
+      Pitch: 0.5
+      Yaw: 0.8okey ahora en el rviz las ruedas tienen sus sistemas de coordenadas distintos como puedo arreglar eso. ADemas veamos programa por programa para poder repsasar y saber su fucnionamineto explicandome qu ee slo qu ecambia de ros1 a ros2
+Ejecutó 2 comandos
+
+Son dos cosas: primero arreglo los sistemas de coordenadas de las ruedas, y después empezamos el repaso, programa por programa.
+1. Ruedas con sistemas de coordenadas distintos
+
+Por qué pasa. SolidWorks exportó cada rueda con su propio sistema de coordenadas girado de forma distinta. El de la rueda derecha lleva rpy="3.1416 0 -1.5708", y el de la izquierda rpy="-3.1416 0 1.5708". Los meshes quedan bien colocados porque el joint compensa esa rotación. Por eso, en el display TF de RViz, los ejes de cada rueda apuntan a lados distintos. No es un error y la física funciona igual, pero confunde.
+
+Cómo se arregla. Pasamos la rotación del joint al visual, la collision y el inertial de cada rueda. El joint queda con rpy="0 0 0", así los dos marcos quedan alineados con base_link. Comprobé numéricamente que los meshes quedan exactamente en el mismo lugar y que las dos ruedas siguen avanzando hacia el mismo lado.
+
+En urdf/CLM-EnsambleColmibot.urdf, borra los cuatro bloques de las ruedas (el link LeftLink, el joint LeftW, el link RightWheel y el joint RightW) y pega estos dos en su lugar, antes de los bloques <gazebo>:
+xml
+
+  <link name="LeftLink">
+    <inertial>
+      <origin xyz="-0.0078228 0 0" rpy="-3.1416 0 1.5708" />
+      <mass value="0.019358" />
+      <inertia ixx="4.6755E-06" ixy="1.0095E-15" ixz="-3.9645E-18" iyy="9.1143E-06" iyz="1.0881E-10" izz="4.6754E-06" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="-3.1416 0 1.5708" />
+      <geometry>
+        <mesh filename="package://robot_description/meshes/LeftLink.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0.29804 0.29804 0.29804 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="-0.006 0 0" rpy="0 1.5707963 0" />
+      <geometry>
+        <cylinder radius="0.03" length="0.012" />
+      </geometry>
+    </collision>
+  </link>
+  <joint name="LeftW" type="continuous">
+    <origin xyz="-0.081048 0 0.0165" rpy="0 0 0" />
+    <parent link="base_link" />
+    <child link="LeftLink" />
+    <axis xyz="-1 0 0" />
+  </joint>
+  <link name="RightWheel">
+    <inertial>
+      <origin xyz="0.0078228 0 0" rpy="3.1416 0 -1.5708" />
+      <mass value="0.019358" />
+      <inertia ixx="4.6755E-06" ixy="1.0097E-15" ixz="-4.6805E-18" iyy="9.1143E-06" iyz="1.0881E-10" izz="4.6754E-06" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="3.1416 0 -1.5708" />
+      <geometry>
+        <mesh filename="package://robot_description/meshes/RightWheel.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0.29804 0.29804 0.29804 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0.006 0 0" rpy="0 1.5707963 0" />
+      <geometry>
+        <cylinder radius="0.03" length="0.012" />
+      </geometry>
+    </collision>
+  </link>
+  <joint name="RightW" type="continuous">
+    <origin xyz="0.081048 0 0.0165" rpy="0 0 0" />
+    <parent link="base_link" />
+    <child link="RightWheel" />
+    <axis xyz="-1 0 0" />
+  </joint>
+
+Qué cambió:
+
+    Los dos joints tienen rpy="0 0 0", y las dos ruedas el mismo eje (-1 0 0). Antes, el de la izquierda era 0 -1 0 solo para compensar el giro del marco.
+    El rpy que estaba en el joint ahora está en el visual y en el inertial.
+    La colisión pasó a rpy="0 1.5707963 0", que acuesta el cilindro sobre el eje X.
+
+Recompila y lanza:
+bash
+
+cd ~/robotics_ws
+colcon build --packages-select robot_description --symlink-install
+source install/setup.bash
+ros2 launch robot_description display.launch.py
+
+Los ejes de las dos ruedas (rojo, verde y azul) deben apuntar igual que los de base_link, y el robot se debe ver igual que antes. Ahora los sliders LeftW y RightW giran las ruedas sobre el eje X.
+2. Repaso programa por programa
+
+Los repaso en este orden, uno por uno, para que me digas cuándo seguir:
+#	Archivo	Qué cambia de ROS 1 a ROS 2
+1	package.xml	Herramienta de compilación y dependencias
+2	CMakeLists.txt	De catkin a ament_cmake
+3	display.launch.py	De XML a Python
+4	gazebo.launch.py	De gazebo_ros a ros_gz
+5	URDF	Los bloques <gazebo>
+6	urdf.rviz	Configuración de RViz
+1. package.xml
+
+Es el “documento de identidad” del paquete: nombre, versión, autor 

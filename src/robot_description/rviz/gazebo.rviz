@@ -19,16 +19,18 @@ Visualization Manager:
     - Class: rviz_default_plugins/TF
       Name: TF
       Enabled: true
-      Show Names: true
+      Marker Scale: 0.3
+      Show Names: false
+      Show Axes: true
   Global Options:
-    Fixed Frame: base_footprint
+    Fixed Frame: odom
     Frame Rate: 30
   Tools:
     - Class: rviz_default_plugins/MoveCamera
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 0.8
+      Distance: 1.5
       Focal Point:
         X: 0
         Y: 0
